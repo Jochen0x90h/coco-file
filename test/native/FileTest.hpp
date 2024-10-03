@@ -1,6 +1,5 @@
 #pragma once
 
-#include <coco/platform/Loop_native.hpp>
 #include <coco/platform/File_native.hpp>
 
 
@@ -12,3 +11,5 @@ struct Drivers {
 	File_native file{loop};
 	File_native::Buffer buffer{file, 128};
 };
+
+Drivers drivers;
