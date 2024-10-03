@@ -10,9 +10,9 @@
 namespace coco {
 
 /**
-	Asynchronous file abstraction. Implementations provide buffer classes derived from HeaderBuffer for the actual
-	data transfer.
-*/
+ * Asynchronous file abstraction. Implementations provide buffer classes derived from HeaderBuffer for the actual
+ * data transfer.
+ */
 class File : public BufferDevice {
 public:
 	enum class Mode {
@@ -20,17 +20,22 @@ public:
 		WRITE = 2,
 		READ_WRITE = READ | WRITE,
 
-		TRUNCATE = 4
+		// truncate the file when opening
+		TRUNCATE = 4,
+
+		// create a new file
+		CREATE = TRUNCATE | WRITE,
 	};
 
+	File(State state) : BufferDevice(state) {}
 	virtual ~File();
 
 	/**
-		Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
-		If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
-		@param name file name
-		@param mode open mode
-	*/
+	 * Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
+	 * If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
+	 * @param name file name
+	 * @param mode open mode
+	 */
 	virtual bool open(String name, Mode mode) = 0;
 
 #ifdef NATIVE
@@ -46,21 +51,21 @@ public:
 #endif
 
 	/**
-		Get size of file
-		@return file size
-	*/
+	 * Get size of file
+	 * @return file size
+	 */
 	virtual uint64_t size() = 0;
 
 	/**
-		Set size of file
-		@param size new file size
-	*/
+	 * Set size of file
+	 * @param size new file size
+	 */
 	virtual void resize(uint64_t size) = 0;
 
 	/**
-		Seek
-		@param offset file offset to seek to
-	*/
+	 * Seek
+	 * @param offset file offset to seek to
+	 */
 	virtual void seek(uint64_t offset) = 0;
 };
 

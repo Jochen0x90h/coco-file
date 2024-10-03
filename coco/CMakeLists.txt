@@ -29,7 +29,7 @@ endif()
 target_link_libraries(${PROJECT_NAME}
 	coco::coco
 	coco-loop::coco-loop
-	coco-buffer::coco-buffer
+	coco-device::coco-device
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -41,6 +41,4 @@ target_include_directories(${PROJECT_NAME}
 install(TARGETS ${PROJECT_NAME}
 	FILE_SET headers DESTINATION include/coco
 	FILE_SET platform_headers DESTINATION include
-	LIBRARY DESTINATION lib
-	ARCHIVE DESTINATION lib
 )
