@@ -9,64 +9,74 @@
 
 namespace coco {
 
-/**
- * Asynchronous file abstraction. Implementations provide buffer classes derived from HeaderBuffer for the actual
- * data transfer.
- */
+/// @brief Asynchronous file abstraction. Implementations provide buffer classes derived from HeaderBuffer for the actual
+/// data transfer.
 class File : public BufferDevice {
 public:
-	enum class Mode {
-		READ = 1,
-		WRITE = 2,
-		READ_WRITE = READ | WRITE,
+    /// @brief File open mode.
+    ///
+    enum class Mode {
+        READ = 1,
+        WRITE = 2,
+        READ_WRITE = READ | WRITE,
 
-		// truncate the file when opening
-		TRUNCATE = 4,
+        // truncate the file when opening
+        TRUNCATE = 4,
 
-		// create a new file
-		CREATE = TRUNCATE | WRITE,
-	};
+        // create a new file and open in write mode
+        CREATE = TRUNCATE | WRITE,
+    };
 
-	File(State state) : BufferDevice(state) {}
-	virtual ~File();
+    /// @brief Buffer header type.
+    ///
+    enum class HeaderType : uint8_t {
+        // header is not used, each buffer gets written at the current file position which is incremented
+        NONE,
 
-	/**
-	 * Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
-	 * If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
-	 * @param name file name
-	 * @param mode open mode
-	 */
-	virtual bool open(String name, Mode mode) = 0;
+        // header contains a file offset of 4 bytes size
+        OFFSET_4,
+
+        // header contains a file offset of 8 bytes size
+        OFFSET_8
+    };
+
+    File(State state) : BufferDevice(state) {}
+    virtual ~File();
+
+    /// @brief Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
+    /// If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
+    /// @param name file name
+    /// @param mode open mode
+    /// @return True on success
+    virtual bool open(String name, Mode mode) = 0;
 
 #ifdef NATIVE
-	template <typename T> requires (CStringConcept<T>)
-	bool open(const T &name, Mode mode) {
-		return open(String(name), mode);
-	}
+    template <typename T> requires (CStringConcept<T>)
+    bool open(const T &name, Mode mode) {
+        return open(String(name), mode);
+    }
 
-	bool open(const std::filesystem::path &name, Mode mode) {
-		auto str = name.u8string();
-		return open(String(str.data(), str.size()), mode);
-	}
+    /// @brief Open the file using std::filesystem::path.
+    /// @param name file name
+    /// @param mode open mode
+    /// @return True on success
+    bool open(const std::filesystem::path &name, Mode mode) {
+        auto str = name.u8string();
+        return open(String(str.data(), str.size()), mode);
+    }
 #endif
 
-	/**
-	 * Get size of file
-	 * @return file size
-	 */
-	virtual uint64_t size() = 0;
+    /// @brief Get size of file
+    /// @return file size
+    virtual uint64_t size() = 0;
 
-	/**
-	 * Set size of file
-	 * @param size new file size
-	 */
-	virtual void resize(uint64_t size) = 0;
+    /// @brief Set size of file
+    /// @param size new file size
+    virtual void resize(uint64_t size) = 0;
 
-	/**
-	 * Seek
-	 * @param offset file offset to seek to
-	 */
-	virtual void seek(uint64_t offset) = 0;
+    /// @brief Seek
+    /// @param offset file offset to seek to
+    virtual void seek(uint64_t offset) = 0;
 };
 
 COCO_ENUM(File::Mode)
