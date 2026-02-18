@@ -31,13 +31,13 @@ public:
     ///
     enum class HeaderType : uint8_t {
         // header is not used, each buffer gets written at the current file position which is incremented
-        NONE,
+        NONE = 0,
 
         // header contains a file offset of 4 bytes size
-        OFFSET_4,
+        OFFSET_4 = 4,
 
         // header contains a file offset of 8 bytes size
-        OFFSET_8
+        OFFSET_8 = 8
     };
 
     File(State state) : BufferDevice(state) {}
@@ -66,17 +66,20 @@ public:
     }
 #endif
 
-    /// @brief Get size of file
+    /// @brief Get size of file.
     /// @return file size
+    /// @return File size on success, -1 on error and error() contains the error code
     virtual uint64_t size() = 0;
 
-    /// @brief Set size of file
+    /// @brief Set size of file.
     /// @param size new file size
-    virtual void resize(uint64_t size) = 0;
+    /// @return true on success, false on error and error() contains the error code
+    virtual bool resize(uint64_t size) = 0;
 
-    /// @brief Seek
+    /// @brief Seek.
     /// @param offset file offset to seek to
-    virtual void seek(uint64_t offset) = 0;
+    /// @return true on success, false on error and error() contains the error code
+    virtual bool seek(uint64_t offset) = 0;
 };
 
 COCO_ENUM(File::Mode)

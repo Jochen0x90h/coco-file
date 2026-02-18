@@ -1,19 +1,23 @@
 #include <FileTest.hpp>
-#include <coco/Loop.hpp>
+#include <coco/convert.hpp>
 #include <coco/debug.hpp>
 #include <coco/BufferWriter.hpp>
+#include <coco/Loop.hpp>
 
 
 using namespace coco;
 
 Coroutine write(Loop &loop, File &file) {
-    auto &buffer = file.getBuffer(0);
+    // buffer 0 uses global file offset, buffer 1 has file offset in header
+    auto &buffer0 = file.getBuffer(0);
+    auto &buffer1 = file.getBuffer(1);
 
     // wait until file is ready (open completes successfully)
     co_await file.untilReadyOrDisabled();
     if (!file.ready()) {
         // open failed, device is disabled again
         debug::setRed();
+        debug::out << "Error: Open failed\n";
 
         // exit event loop
         loop.exit();
@@ -21,38 +25,54 @@ Coroutine write(Loop &loop, File &file) {
         co_return;
     }
 
-    co_await buffer.write("foo");
+    co_await buffer0.write("foo");
 
     // write data with file offset
-    buffer.setHeaderType(File::HeaderType::OFFSET_4).header<uint32_t>() = 3;
-    co_await buffer.write("bar");
+    buffer1.header<uint32_t>() = 3;
+    co_await buffer1.write("bar");
+
+    // check file size
+    auto size = file.size();
+    if (size == 6) {
+        debug::setGreen();
+        debug::out << "File size OK\n";
+    } else {
+        debug::setRed();
+        debug::out << "Error: File size is " << dec(size) << ", expected 6\n";
+    }
+
 
     // read back
     file.seek(0);
-    buffer.setHeaderType(File::HeaderType::NONE);
-    //buffer.clearHeader();
-    co_await buffer.read(6);
-    if (buffer.size() == 6) {
+    co_await buffer0.read(6);
+    if (buffer0.size() == 6) {
         // size is ok
         debug::setGreen();
-        if (buffer.string() == "foobar")
+        debug::out << "Buffer size OK\n";
+        if (buffer0.string() == "foobar") {
             // content is ok
             debug::setGreen();
-        else
+            debug::out << "File content OK\n";
+        } else {
             debug::setRed();
+            debug::out << "Error: File content is " << buffer0.string() << ", expected foobar\n";
+        }
     } else {
         debug::setRed();
+        debug::out << "Error: Buffer size is " << dec(buffer0.size()) << ", expected 6\n";
     }
 
     co_await loop.sleep(1s);
 
     // read past the end
-    co_await buffer.read(6);
-    if (buffer.size() == 0) {
+    co_await buffer0.read(6);
+    if (buffer0.size() == 0) {
         // size is ok
         debug::setGreen();
+        debug::out << "Buffer size OK\n";
     } else {
         debug::setRed();
+        debug::out << "Error: Buffer size is " << dec(buffer0.size()) << ", expected 0\n";
     }
 
     // close file
@@ -70,11 +90,10 @@ Coroutine synchronousRead(Loop &loop, Buffer &buffer) {
 }
 
 void synchronousRead(Loop &loop, File &file) {
+    // buffer uses global file offset
     auto &buffer = file.getBuffer(0);
 
     file.seek(0);
-    buffer.setHeaderType(File::HeaderType::NONE);
-    //buffer.clearHeader();
 
     // start read
     synchronousRead(loop, buffer);
@@ -82,20 +101,25 @@ void synchronousRead(Loop &loop, File &file) {
     // run event loop until exit() gets called
     loop.run();
 
-    if (buffer.ready() && buffer.size() == 6) {
-        // size is ok
-        debug::setGreen();
-        if (buffer.string() == "foobar") {
-            // content is ok
+    if (buffer.ready()) {
+        if (buffer.size() == 6) {
+            // size is ok
             debug::setGreen();
-            debug::out << "OK!";
+            debug::out << "Buffer size OK\n";
+            if (buffer.string() == "foobar") {
+                // content is ok
+                debug::setGreen();
+                debug::out << "File content OK\n";
+            } else {
+                debug::setRed();
+                debug::out << "Error: File content is " << buffer.string() << ", expected foobar\n";
+            }
         } else {
             debug::setRed();
-            debug::out << "Content error!";
+            debug::out << "Error: Buffer size is " << dec(buffer.size()) << ", expected 6\n";
         }
     } else {
-        debug::setRed();
-        debug::out << "Size error!";
+        debug::out << "Error: Buffer not ready\n";
     }
 }
 

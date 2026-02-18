@@ -9,7 +9,8 @@ using namespace coco;
 struct Drivers {
     Loop_native loop;
     File_native file{loop};
-    File_native::Buffer buffer{file, 128};
+    File_native::Buffer buffer1{file, 128, File::HeaderType::NONE};
+    File_native::Buffer buffer2{file, 128, File::HeaderType::OFFSET_4};
 };
 
 Drivers drivers;

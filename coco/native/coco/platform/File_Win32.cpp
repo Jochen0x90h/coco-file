@@ -25,7 +25,8 @@ bool File_Win32::open(String name, Mode mode) {
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
         nullptr);
     if (file == INVALID_HANDLE_VALUE) {
-        //int e = WSAGetLastError();
+        int error = GetLastError();
+        setSystemError(error);
         return false;
     }
 
@@ -37,40 +38,66 @@ bool File_Win32::open(String name, Mode mode) {
         ULONG_PTR(handler),
         0) == nullptr)
     {
-        //int e = WSAGetLastError();
+        int error = GetLastError();
+        setSystemError(error);
         CloseHandle(file);
         return false;
     }
     file_ = file;
+    setSuccess();
 
     // set state
-    st.set(State::READY);
+    state_ = State::READY;
 
     // enable buffers
     for (auto &buffer : buffers_) {
-        buffer.setReady(0);
+        buffer.setSuccess(0);
+        buffer.setReady();
     }
 
     // resume all coroutines waiting for state change
-    st.notify(Events::ENTER_OPENING | Events::ENTER_READY);
+    notify(Events::ENTER_OPENING | Events::ENTER_READY);
 
     return true;
 }
 
 uint64_t File_Win32::size() {
-    DWORD high;
-    auto low = GetFileSize(file_, &high);
-    return (uint64_t(high) << 32) | low;
+    // https://learn.microsoft.com/de-de/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex
+    FILE_STANDARD_INFO fileInfo;
+    if (!GetFileInformationByHandleEx(
+            file_,
+            FileStandardInfo,
+            &fileInfo,
+            sizeof(fileInfo)))
+    {
+        int error = GetLastError();
+        setSystemError(error);
+        return -1;
+    }
+    return fileInfo.EndOfFile.QuadPart;
 }
 
-void File_Win32::resize(uint64_t size) {
-    auto high = LONG(size >> 32);
-    SetFilePointer(file_, LONG(size), &high, FILE_BEGIN);
-    SetEndOfFile(file_);
+bool File_Win32::resize(uint64_t size) {
+    // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle
+    FILE_END_OF_FILE_INFO eofInfo;
+    eofInfo.EndOfFile.QuadPart = size;
+    if (!SetFileInformationByHandle(
+        file_,
+        FileEndOfFileInfo,
+        &eofInfo,
+        sizeof(eofInfo)))
+    {
+        int error = GetLastError();
+        setSystemError(error);
+        return false;
+
+    }
+    return true;
 }
 
-void File_Win32::seek(uint64_t offset) {
+bool File_Win32::seek(uint64_t offset) {
     offset_ = offset;
+    return true;
 }
 
 int File_Win32::getBufferCount() {
@@ -88,10 +115,12 @@ void File_Win32::close() {
 
     // close file
     CloseHandle(file_);
+
     file_ = INVALID_HANDLE_VALUE;
+    setSuccess();
 
     // set state
-    st.set(State::DISABLED);
+    state_ = State::DISABLED;
 
     // disable buffers
     for (auto &buffer : buffers_) {
@@ -99,7 +128,7 @@ void File_Win32::close() {
     }
 
     // resume all coroutines waiting for state change
-    st.notify(Events::ENTER_CLOSING | Events::ENTER_DISABLED);
+    notify(Events::ENTER_CLOSING | Events::ENTER_DISABLED);
 }
 
 void File_Win32::handle(OVERLAPPED *overlapped) {
@@ -115,7 +144,7 @@ void File_Win32::handle(OVERLAPPED *overlapped) {
 // File_Win32::Buffer
 
 File_Win32::Buffer::Buffer(File_Win32 &device, int capacity, HeaderType headerType)
-    : coco::Buffer(&overlapped_.Offset, 8, int(headerType), new uint8_t[capacity], capacity, device.st.state)
+    : coco::Buffer(&overlapped_.Offset, int(headerType), new uint8_t[capacity], capacity, device.state_)
     , device_(device)
 {
     device.buffers_.add(*this);
@@ -128,22 +157,21 @@ File_Win32::Buffer::~Buffer() {
     delete [] data_;
 }
 
-bool File_Win32::Buffer::start(Op op) {
-    if (st.state != State::READY) {
-        assert(st.state != State::BUSY);
+bool File_Win32::Buffer::start() {
+    if (state_ != State::READY || (op_ & Op::READ_WRITE) == 0 || size_ == 0) {
+        assert(state_ != State::BUSY);
+        setSuccess(0);
         return false;
     }
 
-    // check if READ or WRITE flag is set
-    assert((op & Op::READ_WRITE) != 0);
-    op_ = op;
+    op2_ = op_;
+
+    // submit operation
+    if (!submit())
+        return false;
 
     // add to list of pending transfers
     device_.transfers_.add(*this);
-
-    // start if device is ready
-    if (device_.st.state == Device::State::READY)
-        start();
 
     // set state
     setBusy();
@@ -152,25 +180,30 @@ bool File_Win32::Buffer::start(Op op) {
 }
 
 bool File_Win32::Buffer::cancel() {
-    if (st.state != State::BUSY)
+    if (state_ != State::BUSY)
         return false;
 
-    auto result = CancelIoEx(device_.file_, &overlapped_);
-    if (!result) {
-        auto e = GetLastError();
-        //std::cerr << "cancel error " << e << std::endl;
+    if ((op2_ & Op::CANCEL) == 0) {
+        auto result = CancelIoEx(device_.file_, &overlapped_);
+        if (!result) {
+            int error = GetLastError();
+            setSystemError(error);
+            //std::cerr << "cancel error " << e << std::endl;
+            return false;
+        }
+        op2_ |= Op::CANCEL;
     }
     return true;
 }
 
-void File_Win32::Buffer::start() {
+bool File_Win32::Buffer::submit() {
     auto &device = device_;
 
     // initialize overlapped
     overlapped_.Internal = 0;
     overlapped_.InternalHigh = 0;
 
-    switch (HeaderType(headerType_)) {
+    switch (HeaderType(headerCapacity_)) {
     case HeaderType::OFFSET_4:
         // use 4 byte offset, clear high word
         overlapped_.OffsetHigh = 0;
@@ -198,30 +231,34 @@ void File_Win32::Buffer::start() {
     if (result == 0) {
         int error = GetLastError();
         if (error != ERROR_IO_PENDING) {
-            // "real" error
-            setReady(0);
-            //return false;
+            setSystemError(error);
+            return false;
         }
     }
 
     // increment file offset
     device.offset_ = *reinterpret_cast<uint64_t *>(&overlapped_.Offset) + size;
+    return true;
 }
 
 void File_Win32::Buffer::handle(OVERLAPPED *overlapped) {
     DWORD transferred;
     auto result = GetOverlappedResult(device_.file_, overlapped, &transferred, false);
-    if (!result) {
-        // "real" error or cancelled (ERROR_OPERATION_ABORTED): return zero size
+    if (result) {
+        // success
+        setSuccess(transferred);
+    } else {
+        // error
+        // ERROR_OPERATION_ABORTED: cancelled
         auto error = GetLastError();
-        transferred = 0;
+        setSystemError(error);
     }
 
     // remove from list of active transfers
     remove2();
 
     // transfer finished
-    setReady(transferred);
+    setReady();
 }
 
 } // namespace coco

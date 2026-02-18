@@ -13,11 +13,20 @@ if(${PLATFORM} STREQUAL "native" OR ${PLATFORM} STREQUAL "emu")
             native/coco/platform/File_native.hpp
     )
     if(WIN32)
+        # IOCP
         target_sources(${PROJECT_NAME}
             PUBLIC FILE_SET platform_headers FILES
                 native/coco/platform/File_Win32.hpp
             PRIVATE
                 native/coco/platform/File_Win32.cpp
+        )
+    elseif(LINUX)
+        # io_uring
+        target_sources(${PROJECT_NAME}
+            PUBLIC FILE_SET platform_headers FILES
+                native/coco/platform/File_io_uring.hpp
+            PRIVATE
+                native/coco/platform/File_io_uring.cpp
         )
     endif()
 elseif(${PLATFORM} MATCHES "^nrf52")

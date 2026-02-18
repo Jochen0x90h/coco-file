@@ -1,23 +1,23 @@
 #include <coco/File.hpp>
-#include <coco/platform/Loop_native.hpp> // includes Windows.h
+#include <coco/platform/Loop_native.hpp>
 
 
 namespace coco {
 
-/// @brief File implementation using IO completion ports on Windows.
+/// @brief File implementation using io_uring on Linux.
 ///
-class File_Win32 : public File, public Loop_Win32::CompletionHandler {
+class File_io_uring : public File {
 public:
     /// @brief Constructor
     /// @param loop event loop
-    File_Win32(Loop_Win32 &loop)
+    File_io_uring(Loop_io_uring &loop)
         : File(State::DISABLED), loop_(loop) {}
 
     /// @brief Constructor that opens the file
     /// @param loop event loop
     /// @param name file name
     /// @param mode open mode
-    File_Win32(Loop_Win32 &loop, String name, Mode mode)
+    File_io_uring(Loop_io_uring &loop, String name, Mode mode)
         : File(State::DISABLED), loop_(loop) {open(name, mode);}
 
     ~File_Win32() override;
@@ -28,8 +28,8 @@ public:
     bool open(String name, Mode mode) override;
     using File::open;
     uint64_t size() override;
-    bool resize(uint64_t size) override;
-    bool seek(uint64_t offset) override;
+    void resize(uint64_t size) override;
+    void seek(uint64_t offset) override;
 
     // BufferDevice methods
     int getBufferCount() override;
@@ -42,9 +42,9 @@ public:
     /// @brief Buffer for transferring data to/from a file
     ///
     class Buffer : public coco::Buffer, public IntrusiveListNode, public IntrusiveListNode2 {
-        friend class File_Win32;
+        friend class File_io_uring;
     public:
-        Buffer(File_Win32 &device, int capacity, HeaderType headerType = HeaderType::NONE);
+        Buffer(File_io_uring &device, int capacity, HeaderType headerType = HeaderType::NONE);
         ~Buffer() override;
 
         bool start() override;
@@ -52,19 +52,19 @@ public:
 
     protected:
         bool submit();
-        void handle(OVERLAPPED *overlapped);
+        void handle(io_uring_cqe &cqe);
 
-        File_Win32 &device_;
-        OVERLAPPED overlapped_;
+        File_io_uring &device_;
+        uint64_t offset_ = 0;
     };
 
 protected:
-    void handle(OVERLAPPED *overlapped) override;
 
-    Loop_Win32 &loop_;
+    Loop_io_uring &loop_;
 
     // file handle
-    HANDLE file_ = INVALID_HANDLE_VALUE;
+    static constexpr int INVALID_HANDLE_VALUE = -1;
+    int file_ = INVALID_HANDLE_VALUE;
 
     // auto incrementing file offset
     uint64_t offset_ = 0;
