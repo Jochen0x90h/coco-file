@@ -1,5 +1,4 @@
 #include "File_Win32.hpp"
-//#include <iostream>
 #include <filesystem>
 
 
@@ -13,7 +12,7 @@ bool File_Win32::open(String name, Mode mode) {
     if (file_ != INVALID_HANDLE_VALUE)
         return false;
 
-    // open file using Win32
+    // open file
     int access = ((mode & Mode::READ) != 0 ? GENERIC_READ : 0) | ((mode & Mode::WRITE) != 0 ? GENERIC_WRITE : 0);
     int disposition = (mode & Mode::TRUNCATE) != 0 ? CREATE_ALWAYS : OPEN_ALWAYS;
     std::filesystem::path path(std::u8string_view(reinterpret_cast<const char8_t *>(name.data()), name.size()));
@@ -115,7 +114,6 @@ void File_Win32::close() {
 
     // close file
     CloseHandle(file_);
-
     file_ = INVALID_HANDLE_VALUE;
     setSuccess();
 
@@ -132,7 +130,7 @@ void File_Win32::close() {
 }
 
 void File_Win32::handle(OVERLAPPED *overlapped) {
-    for (auto &buffer : transfers_) {
+    for (auto &buffer : buffers_) {
         if (overlapped == &buffer.overlapped_) {
             buffer.handle(overlapped);
             break;
@@ -164,14 +162,14 @@ bool File_Win32::Buffer::start() {
         return false;
     }
 
-    op2_ = op_;
+    flags_ = 0;
 
     // submit operation
-    if (!submit())
+    if (!transfer())
         return false;
 
     // add to list of pending transfers
-    device_.transfers_.add(*this);
+    //device_.transfers_.add(*this);
 
     // set state
     setBusy();
@@ -183,7 +181,7 @@ bool File_Win32::Buffer::cancel() {
     if (state_ != State::BUSY)
         return false;
 
-    if ((op2_ & Op::CANCEL) == 0) {
+    if (flags_ == 0) {
         auto result = CancelIoEx(device_.file_, &overlapped_);
         if (!result) {
             int error = GetLastError();
@@ -191,12 +189,12 @@ bool File_Win32::Buffer::cancel() {
             //std::cerr << "cancel error " << e << std::endl;
             return false;
         }
-        op2_ |= Op::CANCEL;
+        flags_ = 1;
     }
     return true;
 }
 
-bool File_Win32::Buffer::submit() {
+bool File_Win32::Buffer::transfer() {
     auto &device = device_;
 
     // initialize overlapped
@@ -204,16 +202,17 @@ bool File_Win32::Buffer::submit() {
     overlapped_.InternalHigh = 0;
 
     switch (HeaderType(headerCapacity_)) {
+    case HeaderType::NONE:
+        // use current file offset
+        *reinterpret_cast<uint64_t *>(&overlapped_.Offset) = device.offset_;
+        break;
     case HeaderType::OFFSET_4:
         // use 4 byte offset, clear high word
         overlapped_.OffsetHigh = 0;
         break;
-    case HeaderType::OFFSET_8:
+    default:
         // use 8 byte offset
         break;
-    default:
-        // use current file offset
-        *reinterpret_cast<uint64_t *>(&overlapped_.Offset) = device.offset_;
     }
 
     // get data and size to read/write
@@ -237,7 +236,8 @@ bool File_Win32::Buffer::submit() {
     }
 
     // increment file offset
-    device.offset_ = *reinterpret_cast<uint64_t *>(&overlapped_.Offset) + size;
+    if (HeaderType(headerCapacity_) == HeaderType::NONE)
+        device.offset_ += size;
     return true;
 }
 
@@ -255,7 +255,7 @@ void File_Win32::Buffer::handle(OVERLAPPED *overlapped) {
     }
 
     // remove from list of active transfers
-    remove2();
+    //remove2();
 
     // transfer finished
     setReady();

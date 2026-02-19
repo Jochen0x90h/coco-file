@@ -41,7 +41,7 @@ public:
 
     /// @brief Buffer for transferring data to/from a file
     ///
-    class Buffer : public coco::Buffer, public IntrusiveListNode, public IntrusiveListNode2 {
+    class Buffer : public coco::Buffer, public IntrusiveListNode {
         friend class File_io_uring;
     public:
         Buffer(File_io_uring &device, int capacity, HeaderType headerType = HeaderType::NONE);
@@ -51,7 +51,7 @@ public:
         bool cancel() override;
 
     protected:
-        bool submit();
+        bool transfer();
         void handle(io_uring_cqe &cqe);
 
         File_io_uring &device_;
@@ -59,7 +59,6 @@ public:
     };
 
 protected:
-
     Loop_io_uring &loop_;
 
     // file handle
@@ -71,9 +70,6 @@ protected:
 
     // list of buffers
     IntrusiveList<Buffer> buffers_;
-
-    // pending transfers
-    IntrusiveList2<Buffer> transfers_;
 };
 
 } // namespace coco

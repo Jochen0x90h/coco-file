@@ -41,7 +41,7 @@ public:
 
     /// @brief Buffer for transferring data to/from a file
     ///
-    class Buffer : public coco::Buffer, public IntrusiveListNode, public IntrusiveListNode2 {
+    class Buffer : public coco::Buffer, public IntrusiveListNode {
         friend class File_Win32;
     public:
         Buffer(File_Win32 &device, int capacity, HeaderType headerType = HeaderType::NONE);
@@ -51,7 +51,7 @@ public:
         bool cancel() override;
 
     protected:
-        bool submit();
+        bool transfer();
         void handle(OVERLAPPED *overlapped);
 
         File_Win32 &device_;
@@ -73,7 +73,7 @@ protected:
     IntrusiveList<Buffer> buffers_;
 
     // pending transfers
-    IntrusiveList2<Buffer> transfers_;
+    //IntrusiveList2<Buffer> transfers_;
 };
 
 } // namespace coco

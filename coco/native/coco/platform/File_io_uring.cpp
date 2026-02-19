@@ -1,5 +1,4 @@
 #include "File_io_uring.hpp"
-//#include <iostream>
 #include <filesystem>
 
 
@@ -107,7 +106,6 @@ void File_Win32::close() {
 
     // close file
     ::close(file_);
-
     file_ = INVALID_HANDLE_VALUE;
     setSuccess();
 
@@ -147,14 +145,11 @@ bool File_Win32::Buffer::start() {
         return false;
     }
 
-    op2_ = op_;
+    flags_ = 0;
 
     // submit operation
-    if (!submit())
+    if (!transfer())
         return false;
-
-    // add to list of pending transfers
-    device_.transfers_.add(*this);
 
     // set state
     setBusy();
@@ -166,29 +161,25 @@ bool File_Win32::Buffer::cancel() {
     if (state_ != State::BUSY)
         return false;
 
-    if ((op2_ & Op::CANCEL) == 0) {
+    if (flags_ == 0) {
         if (!device_.loop_.cancel(this)) {
             // error: submit buffer full
             setError(std::errc::resource_unavailable_try_again);
             return false;
         }
-        op2_ |= Op::CANCEL;
+        flags_ = 1;
     }
     return true;
 }
 
-bool File_Win32::Buffer::submit() {
+bool File_Win32::Buffer::transfer() {
     auto &device = device_;
-
-    // initialize overlapped
-    overlapped_.Internal = 0;
-    overlapped_.InternalHigh = 0;
 
     // get offset
     uint64_t &offset = HeaderType(headerCapacity_) == HeaderType::NONE ? device.offset_ : offset_;
 
     // get data and size to read/write
-    if (!device_.loop_.submit((op_ & Op::WRITE) == 0 ? IORING_OP_READ : IORING_OP_WRITE,
+    if (!device_.loop_.transfer((op_ & Op::WRITE) == 0 ? IORING_OP_READ : IORING_OP_WRITE,
         device.file_, offset, data_, size_, this))
     {
         // error: submit buffer full
@@ -197,7 +188,8 @@ bool File_Win32::Buffer::submit() {
     }
 
     // increment file offset
-    device.offset_ = *reinterpret_cast<uint64_t *>(&overlapped_.Offset) + size;
+    if (HeaderType(headerCapacity_) == HeaderType::NONE)
+        device.offset_ += size;
     return true;
 }
 
@@ -213,9 +205,6 @@ void File_Win32::Buffer::handle(io_uring_cqe &cqe) {
         int error = -result;
         setSystemError(error);
     }
-
-    // remove from list of active transfers
-    remove2();
 
     // transfer finished
     setReady();
