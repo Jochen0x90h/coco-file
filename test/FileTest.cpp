@@ -126,17 +126,20 @@ void synchronousRead(Loop &loop, File &file) {
 // check if open() works with different file name representations
 void checkCompile(File &file) {
     std::filesystem::path n1 = "foo.txt";
-    file.open(n1, File::Mode::READ_WRITE | File::Mode::TRUNCATE);
+    file.open(n1, File::Mode::NEW);
 
     char n2[8] = "foo.txt";
-    file.open(n2, File::Mode::READ_WRITE | File::Mode::TRUNCATE);
+    file.open(n2, File::Mode::NEW);
 }
 
 int main() {
     debug::out << "FileTest\n";
 
     // asynchronous
-    drivers.file.open("foo.txt", File::Mode::READ_WRITE | File::Mode::TRUNCATE);
+    if (!drivers.file.open("foo.txt", File::Mode::NEW)) {
+        debug::out << "Error: " << drivers.file.error().message() << '\n';
+        return 1;
+    }
     write(drivers.loop, drivers.file);
     drivers.loop.run();
 

@@ -162,7 +162,7 @@ bool File_Win32::Buffer::start() {
         return false;
     }
 
-    flags_ = 0;
+    flags_ = 1;
 
     // submit operation
     if (!transfer())
@@ -181,7 +181,7 @@ bool File_Win32::Buffer::cancel() {
     if (state_ != State::BUSY)
         return false;
 
-    if (flags_ == 0) {
+    if (flags_ != 0) {
         auto result = CancelIoEx(device_.file_, &overlapped_);
         if (!result) {
             int error = GetLastError();
@@ -189,7 +189,7 @@ bool File_Win32::Buffer::cancel() {
             //std::cerr << "cancel error " << e << std::endl;
             return false;
         }
-        flags_ = 1;
+        flags_ = 0;
     }
     return true;
 }
@@ -216,15 +216,13 @@ bool File_Win32::Buffer::transfer() {
     }
 
     // get data and size to read/write
-    auto data = data_;
-    int size = size_;
     int result;
     if ((op_ & Op::WRITE) == 0) {
         // read
-        result = ReadFile(device.file_, data, size, nullptr, &overlapped_);
+        result = ReadFile(device.file_, data_, size_, nullptr, &overlapped_);
     } else {
         // write
-        result = WriteFile(device.file_, data, size, nullptr, &overlapped_);
+        result = WriteFile(device.file_, data_, size_, nullptr, &overlapped_);
     }
 
     if (result == 0) {
@@ -237,7 +235,7 @@ bool File_Win32::Buffer::transfer() {
 
     // increment file offset
     if (HeaderType(headerCapacity_) == HeaderType::NONE)
-        device.offset_ += size;
+        device.offset_ += size_;
     return true;
 }
 

@@ -20,7 +20,7 @@ public:
     File_io_uring(Loop_io_uring &loop, String name, Mode mode)
         : File(State::DISABLED), loop_(loop) {open(name, mode);}
 
-    ~File_Win32() override;
+    ~File_io_uring() override;
 
     class Buffer;
 
@@ -28,8 +28,8 @@ public:
     bool open(String name, Mode mode) override;
     using File::open;
     uint64_t size() override;
-    void resize(uint64_t size) override;
-    void seek(uint64_t offset) override;
+    bool resize(uint64_t size) override;
+    bool seek(uint64_t offset) override;
 
     // BufferDevice methods
     int getBufferCount() override;
@@ -41,7 +41,7 @@ public:
 
     /// @brief Buffer for transferring data to/from a file
     ///
-    class Buffer : public coco::Buffer, public IntrusiveListNode {
+    class Buffer : public coco::Buffer, public Loop_io_uring::CompletionHandler, public IntrusiveListNode {
         friend class File_io_uring;
     public:
         Buffer(File_io_uring &device, int capacity, HeaderType headerType = HeaderType::NONE);

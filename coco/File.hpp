@@ -6,6 +6,10 @@
 #ifdef NATIVE
 #include <filesystem>
 #endif
+#if defined(__linux__)
+#include <fcntl.h>
+#endif
+
 
 namespace coco {
 
@@ -16,15 +20,33 @@ public:
     /// @brief File open mode.
     ///
     enum class Mode {
+#if defined(__linux__)
+        READ = O_RDONLY,
+        WRITE = O_WRONLY,
+        READ_WRITE = O_RDWR,       
+
+        // create the file if it does not exist yet
+        CREATE = O_CREAT,
+
+        // truncate the file if it already exists
+        TRUNCATE = O_TRUNC,
+
+        // convenience for creating a new file in read/write mode
+        NEW = READ_WRITE | CREATE | TRUNCATE,
+#else
         READ = 1,
         WRITE = 2,
         READ_WRITE = READ | WRITE,
 
-        // truncate the file when opening
-        TRUNCATE = 4,
+        // create the file if it does not exist yet
+        CREATE = 4,
 
-        // create a new file and open in write mode
-        CREATE = TRUNCATE | WRITE,
+        // truncate the file if it already exists
+        TRUNCATE = 8,
+
+        // convenience for creating a new file in read/write mode
+        NEW = READ_WRITE | CREATE | TRUNCATE,
+#endif
     };
 
     /// @brief Buffer header type.

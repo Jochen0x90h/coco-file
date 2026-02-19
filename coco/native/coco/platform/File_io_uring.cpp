@@ -1,35 +1,12 @@
 #include "File_io_uring.hpp"
 #include <filesystem>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 namespace coco {
-
-namespace {
-int getFlags(Mode mode) {
-    int flags = O_NONBLOCK;
-
-    switch (mode & Mode::READ_WRITE) {
-        case Mode::READ:
-            flags |= O_RDONLY;
-            break;
-        case Mode::WRITE:
-            flags |= O_WRONLY;
-            break;
-        case Mode::READ_WRITE:
-            flags |= O_RDWR;
-            break;
-    }
-
-    if ((mode & Mode::TRUNCATE) != 0) {
-        flags |= O_TRUNC;
-    }
-
-    // close on exec for safety
-    flags |= O_CLOEXEC;
-
-    return flags;
-}
-}
 
 File_io_uring::~File_io_uring() {
     ::close(file_);
@@ -40,10 +17,10 @@ bool File_io_uring::open(String name, Mode mode) {
         return false;
 
     // open file
-    std::string n = name;
-    int flags = getFlags(mode);
+    std::string n(name);
+    int flags = int(mode) | O_NONBLOCK | O_CLOEXEC;
     int perm = 0666;
-    int file = open(n.c_str(), flags, perm);
+    int file = ::open(n.c_str(), flags, perm);
     if (file == INVALID_HANDLE_VALUE) {
         int error = errno;
         setSystemError(error);
@@ -67,7 +44,7 @@ bool File_io_uring::open(String name, Mode mode) {
     return true;
 }
 
-uint64_t File_Win32::size() {
+uint64_t File_io_uring::size() {
     struct stat st;
     if (fstat(file_, &st) < 0) {
         int error = errno;
@@ -77,7 +54,7 @@ uint64_t File_Win32::size() {
     return st.st_size;
 }
 
-bool File_Win32::resize(uint64_t size) {
+bool File_io_uring::resize(uint64_t size) {
     if (ftruncate(file_, size) < 0) {
         int error = errno;
         setSystemError(error);
@@ -86,21 +63,21 @@ bool File_Win32::resize(uint64_t size) {
     return true;
 }
 
-bool File_Win32::seek(uint64_t offset) {
+bool File_io_uring::seek(uint64_t offset) {
     offset_ = offset;
     return true;
 }
 
-int File_Win32::getBufferCount() {
+int File_io_uring::getBufferCount() {
     return buffers_.count();
 }
 
-File_Win32::Buffer &File_Win32::getBuffer(int index) {
+File_io_uring::Buffer &File_io_uring::getBuffer(int index) {
     return buffers_.get(index);
 }
 
 // todo: test what happens when buffers are busy when we call close()
-void File_Win32::close() {
+void File_io_uring::close() {
     if (file_ == INVALID_HANDLE_VALUE)
         return;
 
@@ -122,30 +99,27 @@ void File_Win32::close() {
 }
 
 
-// File_Win32::Buffer
+// File_io_uring::Buffer
 
-File_Win32::Buffer::Buffer(File_Win32 &device, int capacity, HeaderType headerType)
+File_io_uring::Buffer::Buffer(File_io_uring &device, int capacity, HeaderType headerType)
     : coco::Buffer(&offset_, int(headerType), new uint8_t[capacity], capacity, device.state_)
     , device_(device)
 {
     device.buffers_.add(*this);
-
-    // we don't use the event object
-    overlapped_.hEvent = nullptr;
 }
 
-File_Win32::Buffer::~Buffer() {
+File_io_uring::Buffer::~Buffer() {
     delete [] data_;
 }
 
-bool File_Win32::Buffer::start() {
+bool File_io_uring::Buffer::start() {
     if (state_ != State::READY || (op_ & Op::READ_WRITE) == 0 || size_ == 0) {
         assert(state_ != State::BUSY);
         setSuccess(0);
         return false;
     }
 
-    flags_ = 0;
+    flags_ = 1;
 
     // submit operation
     if (!transfer())
@@ -157,22 +131,22 @@ bool File_Win32::Buffer::start() {
     return true;
 }
 
-bool File_Win32::Buffer::cancel() {
+bool File_io_uring::Buffer::cancel() {
     if (state_ != State::BUSY)
         return false;
 
-    if (flags_ == 0) {
+    if (flags_ != 0) {
         if (!device_.loop_.cancel(this)) {
             // error: submit buffer full
             setError(std::errc::resource_unavailable_try_again);
             return false;
         }
-        flags_ = 1;
+        flags_ = 0;
     }
     return true;
 }
 
-bool File_Win32::Buffer::transfer() {
+bool File_io_uring::Buffer::transfer() {
     auto &device = device_;
 
     // get offset
@@ -189,11 +163,11 @@ bool File_Win32::Buffer::transfer() {
 
     // increment file offset
     if (HeaderType(headerCapacity_) == HeaderType::NONE)
-        device.offset_ += size;
+        device.offset_ += size_;
     return true;
 }
 
-void File_Win32::Buffer::handle(io_uring_cqe &cqe) {
+void File_io_uring::Buffer::handle(io_uring_cqe &cqe) {
     int result = cqe.res;
     if (result >= 0) {
         // success
