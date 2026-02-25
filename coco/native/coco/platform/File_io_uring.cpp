@@ -12,15 +12,14 @@ File_io_uring::~File_io_uring() {
     ::close(file_);
 }
 
-bool File_io_uring::open(String name, Mode mode) {
+bool File_io_uring::open(const std::filesystem::path &path, Mode mode) {
     if (file_ != INVALID_HANDLE_VALUE)
         return false;
 
     // open file
-    std::string n(name);
     int flags = int(mode) | O_NONBLOCK | O_CLOEXEC;
     int perm = 0666;
-    int file = ::open(n.c_str(), flags, perm);
+    int file = ::open(path.c_str(), flags, perm);
     if (file == INVALID_HANDLE_VALUE) {
         int error = errno;
         setSystemError(error);

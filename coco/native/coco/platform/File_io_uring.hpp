@@ -1,3 +1,5 @@
+#pragma once
+
 #include <coco/File.hpp>
 #include <coco/platform/Loop_native.hpp>
 
@@ -25,7 +27,7 @@ public:
     class Buffer;
 
     // File methods
-    bool open(String name, Mode mode) override;
+    bool open(const std::filesystem::path &path, Mode mode) override;
     using File::open;
     uint64_t size() override;
     bool resize(uint64_t size) override;

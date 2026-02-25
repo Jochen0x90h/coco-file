@@ -6,7 +6,11 @@
 #ifdef NATIVE
 #include <filesystem>
 #endif
-#if defined(__linux__)
+#if defined(_WIN32)
+#include <coco/platform/WindowsDef.hpp>
+#include <windows.h>
+#include <coco/platform/WindowsUndef.hpp>
+#elif defined(__linux__)
 #include <fcntl.h>
 #endif
 
@@ -19,33 +23,43 @@ class File : public BufferDevice {
 public:
     /// @brief File open mode.
     ///
-    enum class Mode {
-#if defined(__linux__)
-        READ = O_RDONLY,
-        WRITE = O_WRONLY,
-        READ_WRITE = O_RDWR,       
+    enum class Mode : uint32_t {
+#if defined(_WIN32)
+        // open existing file in read-only mode
+        OPEN_READ = OPEN_EXISTING | GENERIC_READ,
 
-        // create the file if it does not exist yet
-        CREATE = O_CREAT,
+        // open existing file in read/write mode
+        OPEN = OPEN_EXISTING | GENERIC_READ | GENERIC_WRITE,
 
-        // truncate the file if it already exists
-        TRUNCATE = O_TRUNC,
+        // truncate existing file and open in read/write mode
+        TRUNCATE = TRUNCATE_EXISTING | GENERIC_READ | GENERIC_WRITE,
 
-        // convenience for creating a new file in read/write mode
-        NEW = READ_WRITE | CREATE | TRUNCATE,
-#else
-        READ = 1,
-        WRITE = 2,
-        READ_WRITE = READ | WRITE,
+        // create file if it does not exist or open in read/write mode
+        CREATE_OR_OPEN = OPEN_ALWAYS | GENERIC_READ | GENERIC_WRITE,
 
-        // create the file if it does not exist yet
-        CREATE = 4,
+        // create file if it does not exist or truncate existing file and open in read/write mode
+        CREATE_OR_TRUNCATE = CREATE_ALWAYS | GENERIC_READ | GENERIC_WRITE,
 
-        // truncate the file if it already exists
-        TRUNCATE = 8,
+        // create file if it does not exist of fail if it exists and open in read/write mode
+        CREATE_OR_FAIL = CREATE_NEW | GENERIC_READ | GENERIC_WRITE,
+#elif defined(__linux__)
+        // open existing file in read-only mode
+        OPEN_READ = O_RDONLY,
 
-        // convenience for creating a new file in read/write mode
-        NEW = READ_WRITE | CREATE | TRUNCATE,
+        // open existing file in read/write mode
+        OPEN = O_RDWR,
+
+        // truncate existing file and open in read/write mode
+        TRUNCATE = O_TRUNC | O_RDWR,
+
+        // create file if it does not exist or open in read/write mode
+        CREATE_OR_OPEN = O_CREAT | O_RDWR,
+
+        // create file if it does not exist or truncate existing file and open in read/write mode
+        CREATE_OR_TRUNCATE = O_CREAT | O_TRUNC | O_RDWR,
+
+        // create file if it does not exist of fail if it exists and open in read/write mode
+        CREATE_OR_FAIL = O_CREAT | O_EXCL | O_RDWR,
 #endif
     };
 
@@ -65,13 +79,33 @@ public:
     File(State state) : BufferDevice(state) {}
     virtual ~File();
 
+#ifdef NATIVE
     /// @brief Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
     /// If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
-    /// @param name file name
+    /// @param name file path and name
     /// @param mode open mode
     /// @return True on success
-    virtual bool open(String name, Mode mode) = 0;
+    virtual bool open(const std::filesystem::path &path, Mode mode) = 0;
 
+    bool open(String path, Mode mode) {
+        std::filesystem::path p(std::u8string_view(reinterpret_cast<const char8_t *>(path.data()), path.size()));
+        return open(p, mode);
+    }
+
+    template <typename T> requires (CStringConcept<T>)
+    bool open(const T &path, Mode mode) {
+        return open(String(path), mode);
+    }
+
+    #else
+    /// @brief Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
+    /// If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
+    /// @param path file path and name
+    /// @param mode open mode
+    /// @return True on success
+    virtual bool open(String path, Mode mode) = 0;
+#endif
+/*
 #ifdef NATIVE
     template <typename T> requires (CStringConcept<T>)
     bool open(const T &name, Mode mode) {
@@ -87,6 +121,7 @@ public:
         return open(String(str.data(), str.size()), mode);
     }
 #endif
+*/
 
     /// @brief Get size of file.
     /// @return file size
@@ -103,7 +138,5 @@ public:
     /// @return true on success, false on error and error() contains the error code
     virtual bool seek(uint64_t offset) = 0;
 };
-
-COCO_ENUM(File::Mode)
 
 } // namespace coco

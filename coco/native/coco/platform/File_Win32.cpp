@@ -8,19 +8,17 @@ File_Win32::~File_Win32() {
     CloseHandle(file_);
 }
 
-bool File_Win32::open(String name, Mode mode) {
+bool File_Win32::open(const std::filesystem::path &path, Mode mode) {
     if (file_ != INVALID_HANDLE_VALUE)
         return false;
 
     // open file
-    int access = ((mode & Mode::READ) != 0 ? GENERIC_READ : 0) | ((mode & Mode::WRITE) != 0 ? GENERIC_WRITE : 0);
-    int disposition = (mode & Mode::TRUNCATE) != 0 ? CREATE_ALWAYS : OPEN_ALWAYS;
-    std::filesystem::path path(std::u8string_view(reinterpret_cast<const char8_t *>(name.data()), name.size()));
+    //std::filesystem::path path(std::u8string_view(reinterpret_cast<const char8_t *>(name.data()), name.size()));
     HANDLE file = CreateFileW(path.c_str(),
-        access,
-        FILE_SHARE_READ,
+        int(mode) & (GENERIC_READ | GENERIC_WRITE),
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr, // security
-        disposition,
+        int(mode) & 7,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
         nullptr);
     if (file == INVALID_HANDLE_VALUE) {
