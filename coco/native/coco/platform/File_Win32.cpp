@@ -115,10 +115,8 @@ void File_Win32::close() {
     file_ = INVALID_HANDLE_VALUE;
     setSuccess();
 
-    // set state
+    // set state of file to DISABLED and state of buffers to DISABLED
     state_ = State::DISABLED;
-
-    // disable buffers
     for (auto &buffer : buffers_) {
         buffer.setDisabled();
     }
@@ -156,13 +154,13 @@ File_Win32::Buffer::~Buffer() {
 bool File_Win32::Buffer::start() {
     if (state_ != State::READY || (op_ & Op::READ_WRITE) == 0 || size_ == 0) {
         assert(state_ != State::BUSY);
-        setSuccess(0);
+        setSuccess();
         return false;
     }
 
-    flags_ = 1;
+    steps_ = 1;
 
-    // submit operation
+    // start transfer
     if (!transfer())
         return false;
 
@@ -179,15 +177,14 @@ bool File_Win32::Buffer::cancel() {
     if (state_ != State::BUSY)
         return false;
 
-    if (flags_ != 0) {
+    if (steps_ != 0) {
         auto result = CancelIoEx(device_.file_, &overlapped_);
         if (!result) {
             int error = GetLastError();
             setSystemError(error);
-            //std::cerr << "cancel error " << e << std::endl;
             return false;
         }
-        flags_ = 0;
+        steps_ = 0;
     }
     return true;
 }
@@ -245,7 +242,7 @@ void File_Win32::Buffer::handle(OVERLAPPED *overlapped) {
         setSuccess(transferred);
     } else {
         // error
-        // ERROR_OPERATION_ABORTED: cancelled
+        // canceled: ERROR_OPERATION_ABORTED
         auto error = GetLastError();
         setSystemError(error);
     }

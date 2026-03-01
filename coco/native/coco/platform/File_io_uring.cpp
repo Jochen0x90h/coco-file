@@ -85,10 +85,8 @@ void File_io_uring::close() {
     file_ = INVALID_HANDLE_VALUE;
     setSuccess();
 
-    // set state
+    // set state of file to DISABLED and state of buffers to DISABLED
     state_ = State::DISABLED;
-
-    // disable buffers
     for (auto &buffer : buffers_) {
         buffer.setDisabled();
     }
@@ -114,13 +112,13 @@ File_io_uring::Buffer::~Buffer() {
 bool File_io_uring::Buffer::start() {
     if (state_ != State::READY || (op_ & Op::READ_WRITE) == 0 || size_ == 0) {
         assert(state_ != State::BUSY);
-        setSuccess(0);
+        setSuccess();
         return false;
     }
 
-    flags_ = 1;
+    steps_ = 1;
 
-    // submit operation
+    // start transfer
     if (!transfer())
         return false;
 
@@ -134,13 +132,13 @@ bool File_io_uring::Buffer::cancel() {
     if (state_ != State::BUSY)
         return false;
 
-    if (flags_ != 0) {
+    if (steps_ != 0) {
         if (!device_.loop_.cancel(this)) {
             // error: submit buffer full
             setError(std::errc::resource_unavailable_try_again);
             return false;
         }
-        flags_ = 0;
+        steps_ = 0;
     }
     return true;
 }
