@@ -60,6 +60,24 @@ public:
 
         // create file if it does not exist of fail if it exists and open in read/write mode
         CREATE_OR_FAIL = O_CREAT | O_EXCL | O_RDWR,
+#else
+        // open existing file in read-only mode
+        OPEN_READ = 1,
+
+        // open existing file in read/write mode
+        OPEN = 3,
+
+        // truncate existing file and open in read/write mode
+        TRUNCATE = (1 << 2) | 3,
+
+        // create file if it does not exist or open in read/write mode
+        CREATE_OR_OPEN = (2 << 2) | 3,
+
+        // create file if it does not exist or truncate existing file and open in read/write mode
+        CREATE_OR_TRUNCATE = (3 << 2) | 3,
+
+        // create file if it does not exist of fail if it exists and open in read/write mode
+        CREATE_OR_FAIL = (4 << 2) | 3,
 #endif
     };
 
@@ -97,7 +115,7 @@ public:
         return open(String(path), mode);
     }
 
-    #else
+#else
     /// @brief Open the file. If operation completes immediately the state is READY or DISABLED depending on the result.
     /// If the operation takes some time the state is BUSY and then goes to READY or DISABLED depending on the result.
     /// @param path file path and name
@@ -105,23 +123,6 @@ public:
     /// @return True on success
     virtual bool open(String path, Mode mode) = 0;
 #endif
-/*
-#ifdef NATIVE
-    template <typename T> requires (CStringConcept<T>)
-    bool open(const T &name, Mode mode) {
-        return open(String(name), mode);
-    }
-
-    /// @brief Open the file using std::filesystem::path.
-    /// @param name file name
-    /// @param mode open mode
-    /// @return True on success
-    bool open(const std::filesystem::path &name, Mode mode) {
-        auto str = name.u8string();
-        return open(String(str.data(), str.size()), mode);
-    }
-#endif
-*/
 
     /// @brief Get size of file.
     /// @return file size

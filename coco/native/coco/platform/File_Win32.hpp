@@ -24,22 +24,6 @@ public:
 
     ~File_Win32() override;
 
-    class Buffer;
-
-    // File methods
-    bool open(const std::filesystem::path &path, Mode mode) override;
-    using File::open;
-    uint64_t size() override;
-    bool resize(uint64_t size) override;
-    bool seek(uint64_t offset) override;
-
-    // BufferDevice methods
-    int getBufferCount() override;
-    Buffer &getBuffer(int index) override;
-
-    // Device methods
-    void close() override;
-
 
     /// @brief Buffer for transferring data to/from a file
     ///
@@ -59,6 +43,21 @@ public:
         File_Win32 &device_;
         OVERLAPPED overlapped_;
     };
+
+
+    // File methods
+    bool open(const std::filesystem::path &path, Mode mode) override;
+    using File::open;
+    uint64_t size() override;
+    bool resize(uint64_t size) override;
+    bool seek(uint64_t offset) override;
+
+    // BufferDevice methods
+    int getBufferCount() override;
+    Buffer &getBuffer(int index) override;
+
+    // Device methods
+    void close() override;
 
 protected:
     void handle(OVERLAPPED *overlapped) override;
