@@ -28,11 +28,10 @@ bool File_Win32::open(const std::filesystem::path &path, Mode mode) {
     }
 
     // add file to completion port of event loop
-    Loop_Win32::CompletionHandler *handler = this;
     if (CreateIoCompletionPort(
         file,
         loop_.port,
-        ULONG_PTR(handler),
+        ULONG_PTR(&static_cast<Loop_Win32::CompletionHandler &>(*this)),
         0) == nullptr)
     {
         int error = GetLastError();
@@ -152,8 +151,12 @@ File_Win32::Buffer::~Buffer() {
 }
 
 bool File_Win32::Buffer::start() {
-    if (state_ != State::READY || (op_ & Op::READ_WRITE) == 0 || size_ == 0) {
-        assert(state_ != State::BUSY);
+    if (state_ != State::READY) {
+        assert(false);
+        setError(std::errc::resource_unavailable_try_again);
+        return false;
+    }
+    if ((op_ & Op::READ_WRITE) == 0 || size_ == 0) {
         setSuccess();
         return false;
     }

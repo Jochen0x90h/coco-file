@@ -33,7 +33,6 @@ bool File_io_uring::open(const std::filesystem::path &path, Mode mode) {
 
     // enable buffers
     for (auto &buffer : buffers_) {
-        buffer.setSuccess(0);
         buffer.setReady();
     }
 
@@ -110,8 +109,12 @@ File_io_uring::Buffer::~Buffer() {
 }
 
 bool File_io_uring::Buffer::start() {
-    if (state_ != State::READY || (op_ & Op::READ_WRITE) == 0 || size_ == 0) {
-        assert(state_ != State::BUSY);
+    if (state_ != State::READY) {
+        assert(false);
+        setError(std::errc::resource_unavailable_try_again);
+        return false;
+    }
+    if ((op_ & Op::READ_WRITE) == 0 || size_ == 0) {
         setSuccess();
         return false;
     }
