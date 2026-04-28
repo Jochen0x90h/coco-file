@@ -126,17 +126,21 @@ void synchronousRead(Loop &loop, File &file) {
 // check if open() compiles with different file name representations
 void checkCompile(File &file) {
     // coco::string
-    String n1 = "foo.txt";
-    file.open(n1, File::Mode::CREATE_OR_TRUNCATE);
+    file.open(String("foo.txt"), File::Mode::CREATE_OR_TRUNCATE);
 
     // c-string
     file.open("foo.txt", File::Mode::CREATE_OR_TRUNCATE);
-    char n2[8] = "foo.txt";
-    file.open(n2, File::Mode::CREATE_OR_TRUNCATE);
+    char n[8] = "foo.txt";
+    file.open(n, File::Mode::CREATE_OR_TRUNCATE);
+
+    // std::string
+    file.open(std::string("foo.txt"), File::Mode::CREATE_OR_TRUNCATE);
+
+    // std::string_view
+    file.open(std::string_view("foo.txt"), File::Mode::CREATE_OR_TRUNCATE);
 
     // std::filesystem::path
-    std::filesystem::path n3 = "foo.txt";
-    file.open(n3, File::Mode::CREATE_OR_TRUNCATE);
+    file.open(std::filesystem::path("foo.txt"), File::Mode::CREATE_OR_TRUNCATE);
 }
 
 int main() {

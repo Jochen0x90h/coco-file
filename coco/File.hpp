@@ -110,7 +110,7 @@ public:
         return open(p, mode);
     }
 
-    template <typename T> requires (CStringConcept<T>)
+    template <typename T> requires (StringConcept<T>)
     bool open(const T &path, Mode mode) {
         return open(String(path), mode);
     }
