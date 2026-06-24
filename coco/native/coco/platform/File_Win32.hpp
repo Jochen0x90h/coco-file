@@ -38,7 +38,7 @@ public:
 
     protected:
         bool transfer();
-        void handle(OVERLAPPED *overlapped);
+        void onCompletion(OVERLAPPED *overlapped);
 
         File_Win32 &device_;
         OVERLAPPED overlapped_;
@@ -60,7 +60,7 @@ public:
     void close() override;
 
 protected:
-    void handle(OVERLAPPED *overlapped) override;
+    void onCompletion(OVERLAPPED *overlapped) override;
 
     Loop_Win32 &loop_;
 

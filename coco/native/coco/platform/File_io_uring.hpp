@@ -38,7 +38,7 @@ public:
 
     protected:
         bool transfer();
-        void handle(io_uring_cqe &cqe);
+        void onCompletion(io_uring_cqe &cqe, int);
 
         File_io_uring &device_;
         uint64_t offset_ = 0;

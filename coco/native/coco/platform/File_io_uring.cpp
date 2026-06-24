@@ -167,7 +167,7 @@ bool File_io_uring::Buffer::transfer() {
     return true;
 }
 
-void File_io_uring::Buffer::handle(io_uring_cqe &cqe) {
+void File_io_uring::Buffer::onCompletion(io_uring_cqe &cqe, int) {
     int result = cqe.res;
     if (result >= 0) {
         // success
