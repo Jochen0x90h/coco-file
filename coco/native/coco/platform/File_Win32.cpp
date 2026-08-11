@@ -213,7 +213,7 @@ bool File_Win32::Buffer::transfer() {
         break;
     }
 
-    // get data and size to read/write
+    // read or write
     int result;
     if ((op_ & Op::WRITE) == 0) {
         // read

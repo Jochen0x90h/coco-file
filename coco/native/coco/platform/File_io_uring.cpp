@@ -136,7 +136,7 @@ bool File_io_uring::Buffer::cancel() {
         return false;
 
     if (steps_ != 0) {
-        if (!device_.loop_.cancel(this)) {
+        if (!device_.loop_.cancel(*this)) {
             // error: submit buffer full
             setError(std::errc::resource_unavailable_try_again);
             return false;
@@ -152,9 +152,9 @@ bool File_io_uring::Buffer::transfer() {
     // get offset
     uint64_t &offset = HeaderType(headerCapacity_) == HeaderType::NONE ? device.offset_ : offset_;
 
-    // get data and size to read/write
-    if (!device_.loop_.transfer((op_ & Op::WRITE) == 0 ? IORING_OP_READ : IORING_OP_WRITE,
-        device.file_, offset, data_, size_, this))
+    // read or write
+    if (!device_.loop_.transfer(*this, (op_ & Op::WRITE) == 0 ? IORING_OP_READ : IORING_OP_WRITE,
+        device.file_, offset, data_, size_))
     {
         // error: submit buffer full
         setError(std::errc::resource_unavailable_try_again);
